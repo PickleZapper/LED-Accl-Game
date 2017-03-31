@@ -2,6 +2,15 @@
 #include <Wire.h>
 #include "Countdown.h"
 
+const byte digits[] = 
+{B11111100, B01100000, B11011010, B11110010, B01100110,
+ B10110110, B10111110, B11100000, B11111110, B11100110};
+
+int digitPins[] = {8, 9, 10, 11};
+int regDataPin   = 5;
+int latchPin  = 6;
+int clockPin  = 7;
+
 int btnPin  = 12;
 int hitPin  = A0;
 int losePin = A1;
@@ -24,7 +33,6 @@ int yReadings[numReads];
 long totalX;
 long totalY;
 
-long startTime;
 long endTime;
 
 int score;
@@ -39,8 +47,22 @@ void setup() {
   pinMode(hitPin, OUTPUT);
   pinMode(losePin, OUTPUT);
   
+  pinMode(digitPins[0], OUTPUT);
+  pinMode(digitPins[1], OUTPUT);
+  pinMode(digitPins[2], OUTPUT);
+  pinMode(digitPins[3], OUTPUT);
+  digitalWrite(digitPins[0], HIGH);
+  digitalWrite(digitPins[1], HIGH);
+  digitalWrite(digitPins[2], HIGH);
+  digitalWrite(digitPins[3], HIGH);
+
+  pinMode(regDataPin, OUTPUT);
+  pinMode(latchPin, OUTPUT);
+  pinMode(clockPin, OUTPUT);
+  shiftOut(regDataPin, clockPin, LSBFIRST, 0);
+  
   lc.shutdown(0, false);
-  lc.setIntensity(0, 5);
+  lc.setIntensity(0, 2);
   lc.clearDisplay(0);
   
   randomSeed(analogRead(A2));
@@ -67,29 +89,42 @@ void loop() {
 
   if(gameStarted) {
     updateGameLed();
-    //updateTimer();
+    printNum((endTime - millis()) / 1000 * 100 + score);
   }
   
-
+  if(gameStarted && millis() > endTime) {
+    lc.clearDisplay(0);
+    while(digitalRead(btnPin) == LOW) {
+      printNum(score);
+    }
+    while(digitalRead(btnPin) == HIGH) {
+      printNum(score);
+    }
+    while(digitalRead(btnPin) == LOW);
+    gameStarted = false;
+  }
+  
   if(digitalRead(btnPin) == HIGH) {
     btnDown = false;
   }
 }
 
 void updateGame() {
+  long hitTime = millis();
   if(xJoyPos == xTgtPos && yJoyPos == yTgtPos) {
     score++;
     digitalWrite(hitPin, HIGH);
-    delay(250);
-    digitalWrite(hitPin, LOW);
   } else {
     if(score) {
-      score++;
+      score--;
     }
     digitalWrite(losePin, HIGH);
-    delay(250);
-    digitalWrite(losePin, LOW);
   }
+  while(millis() - hitTime < 100) {
+    printNum((endTime - millis()) / 1000 * 100 + score);
+  }
+  digitalWrite(hitPin, LOW);
+  digitalWrite(losePin, LOW);
   updateDot();
 }
 
@@ -142,8 +177,7 @@ void startGame() {
   delay(1000);
   setPicture(go);
   delay(250);
-  startTime = millis();
-  endTime = startTime + 10000;
+  endTime = millis() + 10000;
 }
 
 void updateDot() {
@@ -164,6 +198,37 @@ void setPicture(bool picture[][8]) {
       lc.setLed(0, row, col, picture[row][col]);
     }
   }
+}
+
+void printNum(int num) {
+  digitalWrite(latchPin, LOW);
+  shiftOut(regDataPin, clockPin, LSBFIRST, digits[num % 10]);
+  num /= 10;
+  digitalWrite(digitPins[0], HIGH);
+  digitalWrite(latchPin, HIGH);
+  digitalWrite(digitPins[3], LOW);
+  
+  digitalWrite(latchPin, LOW);
+  shiftOut(regDataPin, clockPin, LSBFIRST, digits[num % 10]);
+  num /= 10;
+  digitalWrite(digitPins[3], HIGH);
+  digitalWrite(latchPin, HIGH);
+  digitalWrite(digitPins[2], LOW);
+
+  digitalWrite(latchPin, LOW);
+  shiftOut(regDataPin, clockPin, LSBFIRST, digits[num % 10]|B00000001);
+  num /= 10;
+  digitalWrite(digitPins[2], HIGH);
+  digitalWrite(latchPin, HIGH);
+  digitalWrite(digitPins[1], LOW);
+
+  digitalWrite(latchPin, LOW);
+  shiftOut(regDataPin, clockPin, LSBFIRST, digits[num % 10]);
+  num /= 10;
+  digitalWrite(digitPins[1], HIGH);
+  digitalWrite(latchPin, HIGH);
+  digitalWrite(digitPins[0], LOW);
+  
 }
 
 void updatePos() {
