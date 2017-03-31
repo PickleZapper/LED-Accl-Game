@@ -7,9 +7,9 @@ const byte digits[] =
  B10110110, B10111110, B11100000, B11111110, B11100110};
 
 int digitPins[] = {8, 9, 10, 11};
-int regDataPin   = 5;
-int latchPin  = 6;
-int clockPin  = 7;
+int regDataPin  = 5;
+int latchPin    = 6;
+int clockPin    = 7;
 
 int btnPin  = 12;
 int hitPin  = A0;
@@ -41,6 +41,7 @@ int yTgtPos;
 bool btnDown = false;
 bool gameStarted = false;
 
+int digitIndex = 0;
 
 void setup() {
   pinMode(btnPin, INPUT_PULLUP);
@@ -94,14 +95,15 @@ void loop() {
   
   if(gameStarted && millis() > endTime) {
     lc.clearDisplay(0);
-    while(digitalRead(btnPin) == LOW) {
+    digitalWrite(digitPins[digitIndex], HIGH);
+    while(digitalRead(btnPin) == LOW || endTime + 1000 > millis()) {
       printNum(score);
     }
     while(digitalRead(btnPin) == HIGH) {
       printNum(score);
     }
     while(digitalRead(btnPin) == LOW);
-    gameStarted = false;
+    startGame();
   }
   
   if(digitalRead(btnPin) == HIGH) {
@@ -160,7 +162,9 @@ void startGame() {
   gameStarted = true;
   
   updateDot();
-  
+  for(int i = 0; i < 4; ++i) {
+    digitalWrite(digitPins[i], HIGH);
+  }
   for(int i = 0; i < numReads; ++i) {
     updatePos();
     totalX += AcX;
@@ -201,34 +205,16 @@ void setPicture(bool picture[][8]) {
 }
 
 void printNum(int num) {
+  int nextDigitIndex = (digitIndex >= 3) ? 0 : digitIndex + 1;
   digitalWrite(latchPin, LOW);
+  for(int i = 0; i < 3 - nextDigitIndex; i++) {
+    num /= 10;
+  }
   shiftOut(regDataPin, clockPin, LSBFIRST, digits[num % 10]);
-  num /= 10;
-  digitalWrite(digitPins[0], HIGH);
+  digitalWrite(digitPins[digitIndex], HIGH);
   digitalWrite(latchPin, HIGH);
-  digitalWrite(digitPins[3], LOW);
-  
-  digitalWrite(latchPin, LOW);
-  shiftOut(regDataPin, clockPin, LSBFIRST, digits[num % 10]);
-  num /= 10;
-  digitalWrite(digitPins[3], HIGH);
-  digitalWrite(latchPin, HIGH);
-  digitalWrite(digitPins[2], LOW);
-
-  digitalWrite(latchPin, LOW);
-  shiftOut(regDataPin, clockPin, LSBFIRST, digits[num % 10]|B00000001);
-  num /= 10;
-  digitalWrite(digitPins[2], HIGH);
-  digitalWrite(latchPin, HIGH);
-  digitalWrite(digitPins[1], LOW);
-
-  digitalWrite(latchPin, LOW);
-  shiftOut(regDataPin, clockPin, LSBFIRST, digits[num % 10]);
-  num /= 10;
-  digitalWrite(digitPins[1], HIGH);
-  digitalWrite(latchPin, HIGH);
-  digitalWrite(digitPins[0], LOW);
-  
+  digitalWrite(digitPins[nextDigitIndex], LOW);
+  digitIndex = nextDigitIndex;
 }
 
 void updatePos() {
