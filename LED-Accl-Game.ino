@@ -83,14 +83,12 @@ long totalY;
  * xTgtPos  : X position of the target on the LED matrix
  * yTgtPos  : Y position of the target on the LED matrix
  * btnDown  : prevents button spam
- * gameStarted
  */
 long endTime;
 int score;
 int xTgtPos;
 int yTgtPos;
 bool btnDown = false;
-bool gameStarted = false;
 
 int digitIndex = 0;
 
@@ -132,20 +130,19 @@ void setup() {
 // ***** MAIN LOOP *****
 void loop() {
   // Registered a button press, should probably use interrupts
-  if(gameStarted && digitalRead(btnPin) == LOW && !btnDown) {
+  if(digitalRead(btnPin) == LOW && !btnDown) {
     updateGame();
     btnDown = true;
   }
 
   // Update the position of the player
+  updateGameLed();
+  
   // Update timer and score counter
-  if(gameStarted) {
-    updateGameLed();
-    printNum((endTime - millis()) / 1000 * 100 + score + 100);
-  }
+  printNum((endTime - millis()) / 1000 * 100 + score + 100);
 
   // End the game
-  if(gameStarted && millis() > endTime) {
+  if(millis() > endTime) {
     digitalWrite(digitPins[digitIndex], HIGH);
     lc.clearDisplay(0);
     while(digitalRead(btnPin) == LOW || endTime + 1000 > millis()) {
@@ -154,7 +151,7 @@ void loop() {
     while(digitalRead(btnPin) == HIGH) {
       printNum(score);
     }
-    while(digitalRead(btnPin) == LOW);
+    //while(digitalRead(btnPin) == LOW);
     startGame();
   }
   
@@ -173,7 +170,6 @@ void startGame() {
   totalX = 0;
   totalY = 0;
   score = 0;
-  gameStarted = true;
 
   // update target position
   updateDot();
