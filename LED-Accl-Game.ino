@@ -2,30 +2,74 @@
 #include <Wire.h>
 #include "Countdown.h"
 
+/*
+ * digits : holds values of shift register to write digits 0 - 9
+ *            to seven segment display
+ *          Assumes the following connections; refer to manuals
+ *          Q0 connects to A
+ *          Q1 connects to B
+ *          ................
+ *          Q7 connects to DP
+ */
 const byte digits[] = 
 {B11111100, B01100000, B11011010, B11110010, B01100110,
  B10110110, B10111110, B11100000, B11111110, B11100110};
 
+/*
+ * digitPins    : holds pins connected to common anode pins on seven segment display
+ *                pin numbers are sorted from Most to Least significant
+ * regDataPin   : data pin for shift register
+ * latchPin     : latch pin for shift register
+ * regClockPin  : clock pin for shift register
+ */
 int digitPins[] = {8, 9, 10, 11};
 int regDataPin  = 5;
 int latchPin    = 6;
-int clockPin    = 7;
+int regClockPin = 7;
 
+/*
+ * btnPin   : button input pin
+ * hitPin   : LED for a correct hit
+ * losePin  : LED for an incorrect hit
+ */
 int btnPin  = 12;
 int hitPin  = A0;
 int losePin = A1;
 
-int dataPin = 2;
-int csPin   = 3;
-int clkPin  = 4;
-LedControl lc = LedControl(dataPin, clkPin, csPin);
+/*
+ * ledDataPin   : Data pin for LED Matrix
+ * csPin        : CS pin for LED Matrix
+ * ledClockPin  : Clock pin for LED Matrix
+ */
+int ledDataPin  = 2;
+int csPin       = 3;
+int ledClockPin = 4;
+LedControl lc = LedControl(ledDataPin, ledClockPin, csPin);
 
+/*
+ * MPU_addr       : I2C address of the IMU
+ * AcX, AcY, AcZ  : Accelerometer components
+ * Tmp            : Temperature
+ * GyX, GyY, GyZ  : Gyroscope components
+ */
 const int MPU_addr = 0x68;
 int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ;
 
+/*
+ * xJoyPos  : X position of the player on the LED matrix
+ * yJoyPos  : Y position of the player on the LED matrix
+ */
 int xJoyPos;
 int yJoyPos;
 
+/*
+ * numReads   : number of inputs to collect for input smoothing
+ * readIndex  : allows tracking of reading history
+ * xReadings  : history of x sensor values 
+ * yReadings  : history of y sensor values
+ * totalX     : total of x values to average
+ * totalY     : total of y values to average
+ */
 const int numReads = 4;
 int readIndex;
 int xReadings[numReads];
@@ -33,8 +77,15 @@ int yReadings[numReads];
 long totalX;
 long totalY;
 
+/*
+ * endTime  : time, in milliseconds since program start, that the game ends
+ * score    : player score
+ * xTgtPos  : X position of the target on the LED matrix
+ * yTgtPos  : Y position of the target on the LED matrix
+ * btnDown  : prevents button spam
+ * gameStarted
+ */
 long endTime;
-
 int score;
 int xTgtPos;
 int yTgtPos;
@@ -59,8 +110,8 @@ void setup() {
 
   pinMode(regDataPin, OUTPUT);
   pinMode(latchPin, OUTPUT);
-  pinMode(clockPin, OUTPUT);
-  shiftOut(regDataPin, clockPin, LSBFIRST, 0);
+  pinMode(regClockPin, OUTPUT);
+  shiftOut(regDataPin, regClockPin, LSBFIRST, 0);
   
   lc.shutdown(0, false);
   lc.setIntensity(0, 2);
@@ -73,29 +124,30 @@ void setup() {
   Wire.write(0x6B);
   Wire.write(0);
   Wire.endTransmission(true);
+
+  while(digitalRead(btnPin) == HIGH);
+  startGame();
 }
 
-
+// ***** MAIN LOOP *****
 void loop() {
-  
-  if(!gameStarted && digitalRead(btnPin) == LOW) {
-    startGame();
-    btnDown = true;
-  }
-  
+  // Registered a button press, should probably use interrupts
   if(gameStarted && digitalRead(btnPin) == LOW && !btnDown) {
     updateGame();
     btnDown = true;
   }
 
+  // Update the position of the player
+  // Update timer and score counter
   if(gameStarted) {
     updateGameLed();
-    printNum((endTime - millis()) / 1000 * 100 + score);
+    printNum((endTime - millis()) / 1000 * 100 + score + 100);
   }
-  
+
+  // End the game
   if(gameStarted && millis() > endTime) {
-    lc.clearDisplay(0);
     digitalWrite(digitPins[digitIndex], HIGH);
+    lc.clearDisplay(0);
     while(digitalRead(btnPin) == LOW || endTime + 1000 > millis()) {
       printNum(score);
     }
@@ -111,27 +163,86 @@ void loop() {
   }
 }
 
-void updateGame() {
+/*
+ * startGame
+ *  This function performs the necessary actions to start the game
+ */
+void startGame() {
+  // Initialize default values
+  readIndex = 0;
+  totalX = 0;
+  totalY = 0;
+  score = 0;
+  gameStarted = true;
+
+  // update target position
+  updateDot();
+
+  // turn off seven segment LEDs
+  for(int i = 0; i < 4; ++i) {
+    digitalWrite(digitPins[i], HIGH);
+  }
+
+  // seed position smoother with values
+  for(int i = 0; i < numReads; ++i) {
+    updatePos();
+    totalX += AcX;
+    xReadings[i] = AcX;
+    totalY += AcY;
+    yReadings[i] = AcY;
+  }
+
+  // start countdown
+  setPicture(three);
+  delay(1000);
+  setPicture(two);
+  delay(1000);
+  setPicture(one);
+  delay(1000);
+  setPicture(go);
+  delay(250);
+  //set endTime
+  endTime = millis() + 10000;
+}
+
+
+/*
+ * updateGame
+ *  This function should be called when a button press is registered
+ */
+ void updateGame() {
   long hitTime = millis();
+
+  // test for a correct hit, then adjust score and set respective LED
   if(xJoyPos == xTgtPos && yJoyPos == yTgtPos) {
     score++;
     digitalWrite(hitPin, HIGH);
   } else {
-    if(score) {
+    if(score > 0) {
       score--;
     }
     digitalWrite(losePin, HIGH);
   }
+
+  // keep updating the timer and score
   while(millis() - hitTime < 100) {
-    printNum((endTime - millis()) / 1000 * 100 + score);
+    printNum((endTime - millis()) / 1000 * 100 + score + 100);
   }
   digitalWrite(hitPin, LOW);
   digitalWrite(losePin, LOW);
+
+  // get a new target
   updateDot();
 }
 
+/*
+ * updateGameLed
+ *  This function updates the player's cursor on the LED matrix
+ */
+
 void updateGameLed() {
   updatePos();
+  
   totalX -= xReadings[readIndex];
   xReadings[readIndex] = AcX;
   totalX += AcX;
@@ -154,41 +265,19 @@ void updateGameLed() {
 }
 
 
-void startGame() {
-  readIndex = 0;
-  totalX = 0;
-  totalY = 0;
-  score = 0;
-  gameStarted = true;
-  
-  updateDot();
-  for(int i = 0; i < 4; ++i) {
-    digitalWrite(digitPins[i], HIGH);
-  }
-  for(int i = 0; i < numReads; ++i) {
-    updatePos();
-    totalX += AcX;
-    xReadings[i] = AcX;
-    totalY += AcY;
-    yReadings[i] = AcY;
-  }
-
-  setPicture(three);
-  delay(1000);
-  setPicture(two);
-  delay(1000);
-  setPicture(one);
-  delay(1000);
-  setPicture(go);
-  delay(250);
-  endTime = millis() + 10000;
-}
-
+/*
+ * updateDot
+ *  This function gets a new position for the target
+ */
 void updateDot() {
   xTgtPos = random(6) + 1;
   yTgtPos = random(6) + 1;
 }
 
+/*
+ * setTarget
+ *  This function sets the LEDs for the target
+ */
 void setTarget() {
   lc.setLed(0, yTgtPos + 1, xTgtPos, 1);
   lc.setLed(0, yTgtPos - 1, xTgtPos, 1);
@@ -196,6 +285,10 @@ void setTarget() {
   lc.setLed(0, yTgtPos, xTgtPos - 1, 1);
 }
 
+/*
+ * setPicture
+ *  This function sets the LED matrix to equal a 8x8 bool array
+ */
 void setPicture(bool picture[][8]) {
   for(int row = 0; row < 8; ++row) {
     for(int col = 0; col < 8; ++col) {
@@ -204,19 +297,27 @@ void setPicture(bool picture[][8]) {
   }
 }
 
+/*
+ * printNum
+ *  This function prints up to 4 decimal places of an integer to a seven segment display
+ */
 void printNum(int num) {
   int nextDigitIndex = (digitIndex >= 3) ? 0 : digitIndex + 1;
   digitalWrite(latchPin, LOW);
   for(int i = 0; i < 3 - nextDigitIndex; i++) {
     num /= 10;
   }
-  shiftOut(regDataPin, clockPin, LSBFIRST, digits[num % 10]);
+  shiftOut(regDataPin, regClockPin, LSBFIRST, digits[num % 10]);
   digitalWrite(digitPins[digitIndex], HIGH);
   digitalWrite(latchPin, HIGH);
   digitalWrite(digitPins[nextDigitIndex], LOW);
   digitIndex = nextDigitIndex;
 }
 
+/*
+ * updatePos
+ *  This function polls the IMU for new sensor values
+ */
 void updatePos() {
   Wire.beginTransmission(MPU_addr);
   Wire.write(0x3B);  // starting with register 0x3B (ACCEL_XOUT_H)
