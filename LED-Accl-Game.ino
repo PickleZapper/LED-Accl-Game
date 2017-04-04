@@ -93,36 +93,43 @@ bool btnDown = false;
 int digitIndex = 0;
 
 void setup() {
-  pinMode(btnPin, INPUT_PULLUP);
-  pinMode(hitPin, OUTPUT);
-  pinMode(losePin, OUTPUT);
-  
+  pinMode(btnPin, INPUT_PULLUP);    // Button
+  pinMode(hitPin, OUTPUT);          // Correct hit LED
+  pinMode(losePin, OUTPUT);         // Incorrect hit LED
+
+  // Pins for seven segment display common cathodes
   pinMode(digitPins[0], OUTPUT);
   pinMode(digitPins[1], OUTPUT);
   pinMode(digitPins[2], OUTPUT);
   pinMode(digitPins[3], OUTPUT);
+
+  // Turn off seven segment display
   digitalWrite(digitPins[0], HIGH);
   digitalWrite(digitPins[1], HIGH);
   digitalWrite(digitPins[2], HIGH);
   digitalWrite(digitPins[3], HIGH);
 
+  // Pins for shift register
   pinMode(regDataPin, OUTPUT);
   pinMode(latchPin, OUTPUT);
   pinMode(regClockPin, OUTPUT);
   shiftOut(regDataPin, regClockPin, LSBFIRST, 0);
-  
+
+  // Initialize LCD
   lc.shutdown(0, false);
   lc.setIntensity(0, 2);
   lc.clearDisplay(0);
   
   randomSeed(analogRead(A2));
 
+  // Start connection with MPU
   Wire.begin();
   Wire.beginTransmission(MPU_addr);
   Wire.write(0x6B);
   Wire.write(0);
   Wire.endTransmission(true);
 
+  // Wait for initial button press
   while(digitalRead(btnPin) == HIGH);
   startGame();
 }
@@ -238,7 +245,8 @@ void startGame() {
 
 void updateGameLed() {
   updatePos();
-  
+
+  // Get new readings
   totalX -= xReadings[readIndex];
   xReadings[readIndex] = AcX;
   totalX += AcX;
@@ -251,10 +259,12 @@ void updateGameLed() {
   if(readIndex >= numReads) {
     readIndex = 0;
   }
-  
+
+  // Map the positions
   xJoyPos = map(totalX / numReads, -8192, 8191, 0, 8);
   yJoyPos = 7 - map(totalY / numReads, -8192, 8191, 0, 8);
 
+  // Update the LED matrix
   lc.clearDisplay(0);
   setTarget();
   lc.setLed(0, yJoyPos, xJoyPos, 1);
@@ -283,7 +293,7 @@ void setTarget() {
 
 /*
  * setPicture
- *  This function sets the LED matrix to equal a 8x8 bool array
+ *  This function sets the LED matrix to equal an 8x8 bool array
  */
 void setPicture(bool picture[][8]) {
   for(int row = 0; row < 8; ++row) {
@@ -295,7 +305,8 @@ void setPicture(bool picture[][8]) {
 
 /*
  * printNum
- *  This function prints up to 4 decimal places of an integer to a seven segment display
+ *  This function prints the least significant 4 decimal places of an integer to a
+ *    seven segment display (with leading zeroes)
  */
 void printNum(int num) {
   int nextDigitIndex = (digitIndex >= 3) ? 0 : digitIndex + 1;
@@ -321,7 +332,9 @@ void updatePos() {
   Wire.requestFrom(MPU_addr, 14, true);  // request a total of 14 registers
   AcX=Wire.read()<<8|Wire.read();  // 0x3B (ACCEL_XOUT_H) & 0x3C (ACCEL_XOUT_L)    
   AcY=Wire.read()<<8|Wire.read();  // 0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)
-  
+
+
+  // These axes aren't used, so they do not need to be polled
   /*
   AcZ=Wire.read()<<8|Wire.read();  // 0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)
   Tmp=Wire.read()<<8|Wire.read();  // 0x41 (TEMP_OUT_H) & 0x42 (TEMP_OUT_L)
