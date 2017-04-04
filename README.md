@@ -14,3 +14,4 @@ A little game I programmed using an 8x8 LED matrix and accelerometer.
  * Documentation kinda sucks
  * Not sure if it should use busy while loops or allow for parallel tasks
  * Functions kinda suck (The functions do too much and not enough at the same time)
+ * Button input should probably use interrupts
