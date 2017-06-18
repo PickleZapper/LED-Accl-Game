@@ -1,5 +1,7 @@
 # LED-Accl-Game
 A little game I programmed using an 8x8 LED matrix and accelerometer.
+## Video
+https://www.youtube.com/watch?v=nY7nZX293Ro
 ## Components Used
 * 1 x Arduino Uno R3
 * 1 x MPU-6050
